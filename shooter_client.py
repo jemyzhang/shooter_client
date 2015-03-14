@@ -16,7 +16,6 @@ import os
 import sys
 
 import requests
-from requests.packages.urllib3 import disable_warnings
 
 
 def calculate_checksum(filename):
@@ -43,6 +42,7 @@ def calculate_checksum(filename):
     fobj.close()
     return checksum
 
+
 def get_subtitleinfo(filename):
     """do api request, parse error, return response."""
     sys.stdout.write("Requesting subtitle info...\n")
@@ -58,11 +58,10 @@ def get_subtitleinfo(filename):
     )
     if response.text == u'\xff':
         sys.stderr.write("Subtitle not found.\n")
-        sys.exit(1)
     return response
 
+
 def main(filename):
-    disable_warnings()
     if not os.path.isfile(os.path.realpath(filename)):
         sys.stderr.write("File %s not found.\n" % filename)
         sys.exit(1)
@@ -71,23 +70,39 @@ def main(filename):
     response = get_subtitleinfo(filename)
     sys.stdout.write("Requesting subtitle file...\n")
     subtitles = set([])
-    for count in xrange(len(response.json())):
-        if count != 0:
-            _basename = "%s-alt.%s" % (basename, count)
-        else:
-            _basename = "%s.%s" % (basename, count)
+    try:
+        import simplejson
+        for count in xrange(len(response.json())):
+            if count != 0:
+                _basename = "%s-alt.%s" % (basename, count)
+            else:
+                _basename = "%s.%s" % (basename, count)
 
-        for fileinfo in response.json()[count]['Files']:
-            url = fileinfo['Link']
-            ext = fileinfo['Ext']
-            _response = requests.get(url, verify=False)
-            filename = "%s.%s" % (_basename, ext)
+            for fileinfo in response.json()[count]['Files']:
+                url = fileinfo['Link']
+                ext = fileinfo['Ext']
+                _response = requests.get(url, verify=False)
+                filename = "%s.%s" % (_basename.decode('utf-8'), ext)
 
-            if _response.ok and _response.text not in subtitles:
-                subtitles.add(_response.text)
-                fobj = open(filename, 'w')
-                fobj.write(_response.text.encode("UTF8"))
-                fobj.close()
+                if _response.ok and _response.text not in subtitles:
+                    subtitles.add(_response.text)
+                    fobj = open(filename, 'w')
+                    fobj.write(_response.text.encode("UTF8"))
+                    fobj.close()
+    except simplejson.scanner.JSONDecodeError:
+       print 'response error happend'
 
 if __name__ == '__main__':
-    main(sys.argv[1])
+    processdir = os.path.abspath(sys.argv[1]) + '/'
+    mov_dir_list = os.listdir(processdir)
+    for m in mov_dir_list:
+        files = os.listdir(m)
+        if not '.subtitle_downloaded' in files:
+            for file in files:
+                if os.path.splitext(file)[1] == '.mkv':
+                    m_path = processdir + m + '/' + file
+                    print 'Get subtitle for %s' % m_path
+                    main(m_path)
+                    flag_path = processdir + m + '/.subtitle_downloaded'
+                    os.mknod(flag_path)
+    #main(sys.argv[1])
